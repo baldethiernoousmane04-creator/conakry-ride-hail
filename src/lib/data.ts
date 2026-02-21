@@ -1,4 +1,4 @@
-import { MotorcycleModel, Neighborhood, PublicPlace, PlaceCategory, DeliveryService, UserProfile, RideHistoryItem, Wallet, AdminWallet, Transaction, AppNotification, SettlementMethod, Promotion, DiscountCode } from "../types";
+import { MotorcycleModel, Neighborhood, PublicPlace, PlaceCategory, DeliveryService, UserProfile, RideHistoryItem, Wallet, AdminWallet, Transaction, AppNotification, SettlementMethod, Promotion, DiscountCode, Rating, RideOption } from "../types";
 
 export const REGIONS = [
   "Conakry",
@@ -174,7 +174,15 @@ export const MOCK_USER: UserProfile = {
   avatar: "https://storage.googleapis.com/dala-prod-public-storage/generated-images/2bc7131e-2f56-4a78-8761-15b8684d62d2/user-avatar-8d4bcc94-1771682622183.webp",
   rating: 4.9,
   totalRides: 42,
-  joinedDate: "Janvier 2024"
+  joinedDate: "Janvier 2024",
+  role: 'customer',
+  loyaltyPoints: 1250,
+  referralCode: "MOUSSA224",
+  preferences: {
+    language: 'fr',
+    notifications: true,
+    favoriteVehicle: 'tvszt'
+  }
 };
 
 export const MOCK_RIDE_HISTORY: RideHistoryItem[] = [
@@ -188,6 +196,7 @@ export const MOCK_RIDE_HISTORY: RideHistoryItem[] = [
     vehicleType: 'moto',
     vehicleName: 'TVS ZT',
     driverName: 'Abdoulaye B.',
+    driverId: 'driver-1',
     commission: 3750,
     paymentMethod: 'digital'
   },
@@ -201,6 +210,7 @@ export const MOCK_RIDE_HISTORY: RideHistoryItem[] = [
     vehicleType: 'moto',
     vehicleName: 'TVS 125',
     driverName: 'Mohamed C.',
+    driverId: 'driver-2',
     commission: 2250,
     paymentMethod: 'cash'
   },
@@ -214,6 +224,18 @@ export const MOCK_RIDE_HISTORY: RideHistoryItem[] = [
     vehicleType: 'moto',
     vehicleName: 'TVS 150',
     paymentMethod: 'digital'
+  }
+];
+
+export const MOCK_RATINGS: Rating[] = [
+  {
+    id: "rat-1",
+    tripId: "ride-1",
+    raterUserId: "user-123",
+    ratedUserId: "driver-1",
+    ratingValue: 5,
+    reviewText: "Excellent trajet, chauffeur très prudent !",
+    createdAt: "2024-05-20T15:00:00Z"
   }
 ];
 
@@ -236,17 +258,18 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
     status: 'completed'
   },
   {
-    id: "tx-3",
-    type: 'delivery',
-    amount: -15000,
-    date: "18 Mai 2024, 15:45",
-    description: "Livraison Wongaye Coursier",
-    status: 'completed',
-    paymentMethod: 'cash'
+    id: "tx-4",
+    type: 'referral_bonus',
+    amount: 10000,
+    date: "15 Mai 2024, 12:00",
+    description: "Bonus de parrainage (Ami: Alpha)",
+    status: 'completed'
   }
 ];
 
 export const MOCK_WALLET: Wallet = {
+  id: "w-1",
+  userId: "user-123",
   balance: 145000,
   currency: "GNF",
   transactions: MOCK_TRANSACTIONS
@@ -270,6 +293,8 @@ export const MOCK_SETTLEMENT_METHODS: SettlementMethod[] = [
 ];
 
 export const MOCK_ADMIN_WALLET: AdminWallet = {
+  id: "aw-1",
+  userId: "admin-1",
   balance: 1250000,
   totalCommissions: 8540000,
   availableForWithdrawal: 1250000,
@@ -313,12 +338,12 @@ export const MOCK_NOTIFICATIONS: AppNotification[] = [
     type: 'promo'
   },
   {
-    id: "notif-finance-1",
-    title: "Alerte de solde faible",
-    message: "Votre solde de prépaiement est de 8,500 GNF. Rechargez pour continuer à recevoir des courses.",
-    date: "Il y a 1 heure",
+    id: "notif-loyalty-1",
+    title: "Nouveau niveau atteint !",
+    message: "Félicitations ! Vous êtes maintenant membre Or. Gagnez 2x plus de points par trajet.",
+    date: "Il y a 3 heures",
     read: false,
-    type: 'finance'
+    type: 'loyalty'
   }
 ];
 
@@ -435,4 +460,43 @@ export const calculateCommissionBreakdown = (fare: number) => {
     commission,
     driverNet
   };
+};
+
+/**
+ * Ratings Functions
+ */
+export const createRating = async (rating: Omit<Rating, 'id' | 'createdAt'>): Promise<Rating> => {
+  console.log("Creating rating in database/mock:", rating);
+  const newRating: Rating = {
+    ...rating,
+    id: `rat-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: new Date().toISOString()
+  };
+  MOCK_RATINGS.push(newRating);
+  return newRating;
+};
+
+export const getTripRatings = (tripId: string): Rating[] => {
+  return MOCK_RATINGS.filter(r => r.tripId === tripId);
+};
+
+export const getUserAverageRating = (userId: string): number => {
+  const userRatings = MOCK_RATINGS.filter(r => r.ratedUserId === userId);
+  if (userRatings.length === 0) return 5.0;
+  const sum = userRatings.reduce((acc, curr) => acc + curr.ratingValue, 0);
+  return Number((sum / userRatings.length).toFixed(1));
+};
+
+/**
+ * Book a ride (Simulated)
+ */
+export const bookRide = async (pickup: string, destination: string, rideOption: RideOption): Promise<{ success: boolean; tripId: string }> => {
+  // Simulate API call
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const tripId = `trip-${Math.random().toString(36).substr(2, 9)}`;
+      console.log(`Booking ride: from ${pickup} to ${destination} with ${rideOption.name}`);
+      resolve({ success: true, tripId });
+    }, 1500);
+  });
 };

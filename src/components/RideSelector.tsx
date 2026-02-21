@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RideOption, MotorcycleModel, DeliveryService } from '../types';
-import { Users, Clock, Zap, Gem, Package, Truck, Bike, Tag, X, CheckCircle2 } from 'lucide-react';
+import { Users, Clock, Zap, Gem, Package, Truck, Bike, Tag, X, CheckCircle2, Leaf, Crown, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MOTORCYCLE_MODELS, DELIVERY_SERVICES, validateDiscountCode } from '../lib/data';
 import { formatCurrency } from '../lib/utils';
@@ -28,6 +28,36 @@ const BASE_CAR_OPTIONS: RideOption[] = [
     description: 'Berlines de luxe climatisées',
     category: 'premium',
     image: 'https://storage.googleapis.com/dala-prod-public-storage/generated-images/2bc7131e-2f56-4a78-8761-15b8684d62d2/luxury-car-wongaye-17a2043d-1771678359586.webp'
+  },
+  {
+    id: 'xl',
+    name: 'Wongaye XL',
+    price: 120000,
+    estimatedTime: '8 min',
+    capacity: 6,
+    description: 'Idéal pour les groupes et bagages',
+    category: 'xl',
+    image: 'https://storage.googleapis.com/dala-prod-public-storage/generated-images/2bc7131e-2f56-4a78-8761-15b8684d62d2/suv-car-wongaye-123123.webp'
+  },
+  {
+    id: 'electric',
+    name: 'Wongaye Éco',
+    price: 40000,
+    estimatedTime: '7 min',
+    capacity: 4,
+    description: 'Véhicule 100% électrique',
+    category: 'electric',
+    image: 'https://storage.googleapis.com/dala-prod-public-storage/generated-images/2bc7131e-2f56-4a78-8761-15b8684d62d2/electric-car-wongaye-456456.webp'
+  },
+  {
+    id: 'luxury',
+    name: 'Wongaye Black',
+    price: 250000,
+    estimatedTime: '10 min',
+    capacity: 4,
+    description: 'Service VIP, chauffeur en costume',
+    category: 'luxury',
+    image: 'https://storage.googleapis.com/dala-prod-public-storage/generated-images/2bc7131e-2f56-4a78-8761-15b8684d62d2/luxury-black-car-789789.webp'
   }
 ];
 
@@ -111,8 +141,18 @@ export const RideSelector: React.FC<RideSelectorProps> = ({ selectedId, onSelect
     return { price: Math.max(0, originalPrice - discount), discount };
   };
 
+  const getBadge = (category: string) => {
+    switch (category) {
+      case 'luxury': return <Crown size={12} className="text-amber-500" />;
+      case 'electric': return <Leaf size={12} className="text-emerald-500" />;
+      case 'xl': return <Users size={12} className="text-blue-500" />;
+      case 'premium': return <Shield size={12} className="text-indigo-500" />;
+      default: return null;
+    }
+  };
+
   return (
-    <div className="space-y-4 py-2">
+    <div className="space-y-4 py-2 text-left">
       {/* Tab Switcher */}
       <div className="flex p-1 bg-gray-100 rounded-2xl">
         <button
@@ -136,7 +176,7 @@ export const RideSelector: React.FC<RideSelectorProps> = ({ selectedId, onSelect
       </div>
 
       {/* Ride Options List */}
-      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
+      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 no-scrollbar">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -170,17 +210,18 @@ export const RideSelector: React.FC<RideSelectorProps> = ({ selectedId, onSelect
                   
                   <div className="ml-4 flex-grow">
                     <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-1.5">
+                      <div className="text-left">
+                        <div className="flex items-center gap-1.5 text-left">
                           <h4 className="font-bold text-gray-900">{ride.name}</h4>
+                          {getBadge(ride.category)}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5">
                           <p className="text-[10px] text-gray-500 font-bold flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
                             <Clock size={10} /> {ride.estimatedTime}
                           </p>
-                          {ride.category === 'cargo' ? (
+                          {ride.category === 'cargo' || ride.category === 'xl' ? (
                             <p className="text-[10px] text-gray-500 font-bold flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
-                              <Truck size={10} /> XL
+                              <Truck size={10} /> {ride.capacity} Pers.
                             </p>
                           ) : (
                             <p className="text-[10px] text-gray-500 font-bold flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
@@ -198,7 +239,7 @@ export const RideSelector: React.FC<RideSelectorProps> = ({ selectedId, onSelect
                         </span>
                       </div>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-1 line-clamp-1 italic">{ride.description}</p>
+                    <p className="text-[11px] text-gray-500 mt-1 line-clamp-1 italic text-left">{ride.description}</p>
                   </div>
                 </motion.div>
               );
@@ -219,7 +260,7 @@ export const RideSelector: React.FC<RideSelectorProps> = ({ selectedId, onSelect
             >
               <div className="flex items-center gap-2">
                 <CheckCircle2 size={18} className="text-emerald-500" />
-                <div>
+                <div className="text-left">
                   <p className="text-xs font-bold text-emerald-900">Code {appliedDiscount.code} appliqué</p>
                   <p className="text-[10px] text-emerald-600 font-medium">Réduction active sur votre trajet</p>
                 </div>

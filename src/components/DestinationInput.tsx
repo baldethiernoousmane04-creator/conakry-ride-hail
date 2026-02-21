@@ -78,7 +78,7 @@ export const DestinationInput: React.FC<DestinationInputProps> = ({ onDestinatio
   };
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-white text-left">
       {/* Search Header */}
       <div className="p-4 space-y-3 bg-white shadow-sm z-10">
         <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100">
@@ -164,13 +164,13 @@ export const DestinationInput: React.FC<DestinationInputProps> = ({ onDestinatio
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: Math.min(idx * 0.02, 0.3) }}
                 onClick={() => handleSelect(item.name)}
-                className="w-full flex items-center gap-4 py-4 border-b border-gray-50 group active:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-4 py-4 border-b border-gray-50 group active:bg-gray-50 transition-colors text-left"
               >
                 <div className="p-2.5 bg-gray-50 rounded-full text-gray-400 group-hover:bg-yellow-50 group-hover:text-yellow-600 transition-colors">
                   <CategoryIcon category={item.category} size={20} />
                 </div>
                 <div className="text-left flex-grow">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-left">
                     <p className="text-sm font-bold text-gray-900">{item.name}</p>
                     {item.category !== 'Quartier' && (
                       <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium uppercase tracking-tighter">

@@ -6,7 +6,7 @@ export interface RideOption {
   image: string;
   capacity: number;
   description: string;
-  category: 'moto' | 'car' | 'premium' | 'utility' | 'cargo' | 'courier';
+  category: 'moto' | 'car' | 'premium' | 'utility' | 'cargo' | 'courier' | 'luxury' | 'electric' | 'xl';
   model?: string;
   isRare?: boolean;
 }
@@ -56,7 +56,7 @@ export interface PublicPlace {
   address?: string;
 }
 
-export type AppState = 'idle' | 'searching' | 'selecting' | 'confirmed' | 'on_trip' | 'profile' | 'history' | 'wallet' | 'notifications' | 'admin_dashboard';
+export type AppState = 'idle' | 'searching' | 'selecting' | 'confirmed' | 'on_trip' | 'profile' | 'history' | 'wallet' | 'notifications' | 'admin_dashboard' | 'loyalty' | 'referral';
 
 export type UserRole = 'customer' | 'driver' | 'admin';
 
@@ -86,6 +86,8 @@ export interface DriverStats {
   isOnline: boolean;
   walletBalance: number;
   verificationStatus: DriverStatus;
+  acceptanceRate: number;
+  onlineHours: number;
 }
 
 export interface RideRequest {
@@ -96,6 +98,8 @@ export interface RideRequest {
   price: number;
   category: string;
   paymentMethod: 'cash' | 'digital';
+  distance?: string;
+  duration?: string;
 }
 
 export interface UserProfile {
@@ -108,6 +112,14 @@ export interface UserProfile {
   totalRides: number;
   joinedDate: string;
   role: UserRole;
+  status?: 'active' | 'suspended' | 'pending';
+  loyaltyPoints: number;
+  referralCode: string;
+  preferences?: {
+    language: string;
+    notifications: boolean;
+    favoriteVehicle: string;
+  };
 }
 
 export interface RideHistoryItem {
@@ -120,6 +132,8 @@ export interface RideHistoryItem {
   vehicleType: string;
   vehicleName: string;
   driverName?: string;
+  driverId?: string;
+  customerId?: string;
   commission?: number;
   paymentMethod?: 'cash' | 'digital';
 }
@@ -128,7 +142,7 @@ export interface Transaction {
   id: string;
   walletId?: string;
   rideId?: string;
-  type: 'ride' | 'topup' | 'refund' | 'delivery' | 'commission' | 'settlement';
+  type: 'ride' | 'topup' | 'refund' | 'delivery' | 'commission' | 'settlement' | 'referral_bonus' | 'loyalty_redemption';
   amount: number;
   date: string;
   description: string;
@@ -175,7 +189,7 @@ export interface AppNotification {
   message: string;
   date: string;
   read: boolean;
-  type: 'promo' | 'system' | 'trip' | 'support' | 'finance';
+  type: 'promo' | 'system' | 'trip' | 'support' | 'finance' | 'loyalty';
 }
 
 export interface Promotion {
@@ -201,4 +215,37 @@ export interface DiscountCode {
   usageLimit?: number;
   usageCount: number;
   isActive: boolean;
+}
+
+export interface Rating {
+  id: string;
+  tripId: string;
+  raterUserId: string;
+  ratedUserId: string;
+  ratingValue: number;
+  reviewText?: string;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  tripId: string;
+  text: string;
+  createdAt: string;
+  isRead: boolean;
+}
+
+export interface Dispute {
+  id: string;
+  tripId: string;
+  userId: string;
+  userName: string;
+  role: UserRole;
+  reason: string;
+  description: string;
+  status: 'pending' | 'investigating' | 'resolved' | 'dismissed';
+  createdAt: string;
+  priority: 'low' | 'medium' | 'high';
 }

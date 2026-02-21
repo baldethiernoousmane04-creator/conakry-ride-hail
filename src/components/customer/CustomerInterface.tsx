@@ -3,8 +3,12 @@ import { MapView } from '../MapView';
 import { DestinationInput } from '../DestinationInput';
 import { RideSelector } from '../RideSelector';
 import { DriverCard } from '../DriverCard';
+import { OnTripView } from './OnTripView';
+import { RatingDialog } from '../RatingDialog';
 import { ProfileAndHistory } from './ProfileAndHistory';
 import { Wallet as WalletView } from './Wallet';
+import { NotificationCenter } from './NotificationCenter';
+import { ProcessPayment } from './ProcessPayment';
 import { AppState, RideOption } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -14,22 +18,40 @@ import {
   Wallet as WalletIcon, 
   MapPin, 
   LogOut, 
-  UserCircle 
+  UserCircle,
+  Trophy
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
-import { MOCK_USER } from '../../lib/data';
+import { useAuth } from '../auth/AuthContext';
+import { MOCK_USER, getUserAverageRating, MOCK_NOTIFICATIONS, bookRide } from '../../lib/data';
+import { sendLocalNotification } from '../../lib/utils';
 
 interface CustomerInterfaceProps {
   onSwitchToDriver: () => void;
 }
 
+type SelectedRideInfo = RideOption & { originalPrice?: number; discount?: number };
+
 export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchToDriver }) => {
+  const { user } = useAuth();
   const [step, setStep] = useState<AppState>('idle');
   const [isSearching, setIsSearching] = useState(false);
+  const [pickup, setPickup] = useState<string>('Position actuelle');
   const [destination, setDestination] = useState<string>('');
-  const [selectedRide, setSelectedRide] = useState<RideOption | null>(null);
+  const [selectedRide, setSelectedRide] = useState<SelectedRideInfo | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isRatingOpen, setIsRatingOpen] = useState(false);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [pointsEarned, setPointsEarned] = useState(0);
+  
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  const driverData = {
+    id: 'driver-1',
+    name: 'Mamadou Diallo',
+    avatar: "https://storage.googleapis.com/dala-prod-public-storage/generated-images/2bc7131e-2f56-4a78-8761-15b8684d62d2/driver-avatar-89cba9d9-1771684374426.webp",
+    rating: getUserAverageRating('driver-1')
+  };
 
   const handleDestinationSet = (dest: string) => {
     setDestination(dest);
@@ -38,12 +60,13 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
     toast.success(`Destination définie: ${dest}`);
   };
 
-  const handleRideSelect = (ride: RideOption) => {
+  const handleRideSelect = (ride: SelectedRideInfo) => {
     setSelectedRide(ride);
   };
 
-  const handleConfirmRide = () => {
-    if (!selectedRide) return;
+  const handleConfirmRide = async () => {
+    if (!selectedRide || !destination) return;
+    
     setStep('searching');
     
     const isDelivery = selectedRide.category === 'cargo' || selectedRide.category === 'courier';
@@ -53,11 +76,35 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
     
     const loadingToast = toast.loading(loadingMessage);
     
-    setTimeout(() => {
-      setStep('confirmed');
+    try {
+      const response = await bookRide(pickup, destination, selectedRide);
+      
+      if (response.success) {
+        setActiveTripId(response.tripId);
+        
+        setTimeout(() => {
+          setStep('confirmed');
+          toast.dismiss(loadingToast);
+          toast.success(isDelivery ? "Livreur trouvé !" : "Chauffeur trouvé !");
+          
+          sendLocalNotification("Chauffeur en route", {
+            body: `${driverData.name} arrive dans 5 minutes.`,
+          });
+          
+          setTimeout(() => {
+            setStep('on_trip');
+          }, 3000);
+        }, 2000);
+      } else {
+        toast.dismiss(loadingToast);
+        toast.error("Une erreur est survenue lors de la réservation.");
+        setStep('selecting');
+      }
+    } catch (error) {
       toast.dismiss(loadingToast);
-      toast.success(isDelivery ? "Livreur trouvé !" : "Chauffeur trouvé !");
-    }, 3000);
+      toast.error("Erreur de connexion. Veuillez réessayer.");
+      setStep('selecting');
+    }
   };
 
   const resetFlow = () => {
@@ -65,6 +112,9 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
     setDestination('');
     setSelectedRide(null);
     setIsSearching(false);
+    setActiveTripId(null);
+    setPickup('Position actuelle');
+    setPointsEarned(0);
   };
 
   const handleOpenSearch = () => {
@@ -86,12 +136,35 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
     setIsMenuOpen(false);
   };
 
+  const handleOpenNotifications = () => {
+    setStep('notifications');
+    setIsMenuOpen(false);
+  };
+
+  const handleTripArrived = () => {
+    setIsPaymentOpen(true);
+  };
+
+  const handlePaymentSuccess = () => {
+    setIsPaymentOpen(false);
+    const earned = Math.floor((selectedRide?.price || 0) / 1000);
+    setPointsEarned(earned);
+    
+    toast.success(`Paiement réussi ! +${earned} points Wongaye Club`, {
+      icon: <Trophy className="text-yellow-500" />
+    });
+
+    setIsRatingOpen(true);
+  };
+
   const isFullScreenView = useMemo(() => 
-    step === 'profile' || step === 'history' || step === 'wallet' || isSearching
+    step === 'profile' || step === 'history' || step === 'wallet' || step === 'notifications' || step === 'on_trip' || isSearching
   , [step, isSearching]);
 
+  const unreadNotifs = MOCK_NOTIFICATIONS.filter(n => !n.read).length;
+
   return (
-    <div className="relative h-screen w-full bg-white overflow-hidden font-sans">
+    <div className="relative h-screen w-full bg-white overflow-hidden font-sans text-left">
       <nav className={`absolute top-0 inset-x-0 z-50 p-4 flex justify-between items-center transition-all duration-300 ${isFullScreenView ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
         <div className="flex gap-2">
           {step !== 'idle' ? (
@@ -116,16 +189,18 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
         </div>
         
         <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg border border-gray-100 flex items-center gap-2">
-          <span className="font-black text-black tracking-tighter text-xl">WONGAYE</span>
+          <span className="font-black text-black tracking-tighter text-xl uppercase">Wongaye</span>
         </div>
 
         <div className="flex gap-2">
           <Button 
             size="icon" 
             variant="secondary" 
-            className="rounded-full shadow-lg bg-white hover:bg-gray-50 text-black border-none"
+            onClick={handleOpenNotifications}
+            className="rounded-full shadow-lg bg-white hover:bg-gray-50 text-black border-none relative"
           >
             <Bell size={20} />
+            {unreadNotifs > 0 && <span className="absolute top-0 right-0 w-3 h-3 bg-yellow-500 rounded-full border-2 border-white" />}
           </Button>
         </div>
       </nav>
@@ -145,55 +220,67 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="absolute inset-y-0 left-0 w-4/5 max-w-sm bg-white p-6 flex flex-col shadow-2xl"
+              className="absolute inset-y-0 left-0 w-4/5 max-sm:w-full max-w-sm bg-white p-6 flex flex-col shadow-2xl"
             >
               <div className="flex items-center gap-4 mb-8">
                 <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-yellow-500 shadow-md bg-gray-100">
-                  {MOCK_USER.avatar && <img src={MOCK_USER.avatar} alt="User" className="w-full h-full object-cover" />}
+                  <img 
+                    src={user?.user_metadata?.avatar_url || MOCK_USER.avatar} 
+                    alt="User" 
+                    className="w-full h-full object-cover" 
+                  />
                 </div>
-                <div onClick={handleOpenProfile} className="cursor-pointer">
-                  <h3 className="text-xl font-bold">{MOCK_USER.name}</h3>
-                  <p className="text-gray-500 text-sm flex items-center gap-1">
-                    <span>Modifier le profil</span>
+                <div onClick={handleOpenProfile} className="cursor-pointer text-left">
+                  <h3 className="text-xl font-bold">{user?.user_metadata?.full_name || MOCK_USER.name}</h3>
+                  <div className="flex items-center gap-1 text-gray-500 text-sm">
+                    <span>Mon compte</span>
                     <ChevronLeft size={14} className="rotate-180" />
-                  </p>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-2 flex-grow">
-                <button 
-                  onClick={handleOpenWallet}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors text-left"
-                >
-                  <div className="p-2 bg-gray-100 rounded-lg"><WalletIcon size={20} /></div>
-                  <span className="font-bold">Portefeuille</span>
+                <button onClick={handleOpenWallet} className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors text-left font-bold text-gray-700">
+                  <div className="p-2 bg-gray-100 rounded-lg text-black"><WalletIcon size={20} /></div>
+                  <span>Portefeuille</span>
                 </button>
-                <button 
-                  onClick={handleOpenHistory}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors text-left"
-                >
-                  <div className="p-2 bg-gray-100 rounded-lg"><MapPin size={20} /></div>
-                  <span className="font-bold">Mes Trajets</span>
+                <button onClick={handleOpenHistory} className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors text-left font-bold text-gray-700">
+                  <div className="p-2 bg-gray-100 rounded-lg text-black"><MapPin size={20} /></div>
+                  <span>Mes Trajets</span>
                 </button>
-                <button 
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    onSwitchToDriver();
-                  }}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition-colors text-left"
-                >
-                  <div className="p-2 bg-yellow-500 rounded-lg text-white"><UserCircle size={20} /></div>
-                  <span className="font-bold">Devenir Chauffeur</span>
+                <button onClick={handleOpenNotifications} className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-colors text-left font-bold text-gray-700">
+                  <div className="p-2 bg-gray-100 rounded-lg text-black"><Bell size={20} /></div>
+                  <span>Notifications</span>
+                </button>
+                
+                <div className="border-t border-gray-100 my-4" />
+                
+                <div className="bg-yellow-50 p-4 rounded-2xl mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black uppercase text-yellow-600 tracking-wider">Wongaye Club</span>
+                    <Trophy size={14} className="text-yellow-500" />
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-sm font-black">{MOCK_USER.loyaltyPoints} PTS</p>
+                      <p className="text-[10px] text-yellow-700">Niveau Or</p>
+                    </div>
+                    <Button size="sm" onClick={() => setStep('profile')} className="h-7 rounded-lg bg-yellow-500 text-white text-[10px] font-black">
+                      VOIR
+                    </Button>
+                  </div>
+                </div>
+
+                <button onClick={() => { setIsMenuOpen(false); onSwitchToDriver(); }} className="w-full flex items-center gap-4 p-4 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors text-left font-bold">
+                  <div className="p-2 bg-slate-800 rounded-lg text-yellow-500"><UserCircle size={20} /></div>
+                  <span>Mode Chauffeur</span>
                 </button>
               </div>
 
-              <div className="mt-auto border-t pt-6">
-                <button 
-                  onClick={() => toast.info("Déconnexion en cours...")}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-red-50 text-red-500 transition-colors text-left"
-                >
+              <div className="mt-auto border-t pt-6 text-left">
+                <button onClick={() => toast.info("Déconnexion...")} className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-red-50 text-red-500 transition-colors font-bold">
                   <LogOut size={20} />
-                  <span className="font-bold">Déconnexion</span>
+                  <span>Déconnexion</span>
                 </button>
               </div>
             </motion.div>
@@ -201,206 +288,142 @@ export const CustomerInterface: React.FC<CustomerInterfaceProps> = ({ onSwitchTo
         )}
       </AnimatePresence>
 
-      <div className="absolute inset-0 z-0">
-        <MapView />
-      </div>
+      <div className="absolute inset-0 z-0"><MapView /></div>
 
       <AnimatePresence mode="wait">
-        {step === 'wallet' && (
-          <motion.div
-            key="wallet-view"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-0 z-[200] bg-white"
+        {step === 'wallet' && <motion.div key="wallet" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="absolute inset-0 z-[200] bg-white"><WalletView onBack={() => setStep('idle')} /></motion.div>}
+        {step === 'notifications' && <motion.div key="notifs" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="absolute inset-0 z-[200] bg-white"><NotificationCenter onBack={() => setStep('idle')} /></motion.div>}
+        {(step === 'profile' || step === 'history') && <motion.div key="profile" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="absolute inset-0 z-[200] bg-white"><ProfileAndHistory onBack={() => setStep('idle')} onLogout={resetFlow} /></motion.div>}
+        
+        {isSearching && (
+          <motion.div 
+            key="search" 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: 20 }} 
+            className="absolute inset-0 z-[100] bg-white flex flex-col"
           >
-            <WalletView onBack={resetFlow} />
+            <div className="p-2 flex items-center gap-2 text-left">
+              <Button variant="ghost" size="icon" onClick={() => setIsSearching(false)}>
+                <ChevronLeft size={24} />
+              </Button>
+              <span className="font-bold text-lg text-black uppercase tracking-tighter">DÉFINIR L'ITINÉRAIRE</span>
+            </div>
+            <div className="flex-grow">
+              <DestinationInput 
+                onDestinationSet={handleDestinationSet} 
+                onSelectOnMap={() => setIsSearching(false)} 
+              />
+            </div>
           </motion.div>
         )}
         
-        {(step === 'profile' || step === 'history') && (
-          <motion.div
-            key="profile-history-view"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-0 z-[200] bg-white"
-          >
-            <ProfileAndHistory 
-              onBack={resetFlow} 
-              onLogout={() => {
-                toast.success("Déconnecté");
-                resetFlow();
-              }} 
-            />
-          </motion.div>
-        )}
-
-        {isSearching && (
-          <motion.div 
-            key="search-view"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="absolute inset-0 z-[100] bg-white"
-          >
-            <div className="h-full flex flex-col">
-              <div className="p-2 flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={() => setIsSearching(false)}>
-                  <ChevronLeft size={24} />
-                </Button>
-                <span className="font-bold text-lg">Où allez-vous ?</span>
-              </div>
-              <div className="flex-grow">
-                <DestinationInput 
-                  onDestinationSet={handleDestinationSet} 
-                  onSelectOnMap={() => {
-                    setIsSearching(false);
-                    toast.info("Mode sélection sur carte activé");
-                  }}
-                />
-              </div>
-            </div>
-          </motion.div>
+        {step === 'on_trip' && selectedRide && (
+          <OnTripView 
+            key="trip" 
+            ride={selectedRide} 
+            onArrived={handleTripArrived} 
+            onCancel={resetFlow} 
+          />
         )}
       </AnimatePresence>
 
       {!isFullScreenView && (
-        <div className="absolute inset-x-0 bottom-0 z-40 max-w-lg mx-auto p-4 pointer-events-none">
-          <motion.div 
-            layout
-            className="bg-white rounded-[32px] shadow-[0_-8px_30px_rgb(0,0,0,0.12)] p-6 overflow-hidden pointer-events-auto"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          >
-            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-6" />
-
+        <div className="absolute inset-x-0 bottom-0 z-40 max-w-lg mx-auto p-4 pointer-events-none text-left">
+          <motion.div layout className="bg-white rounded-[40px] shadow-2xl p-7 pointer-events-auto border border-gray-100">
+            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-8" />
             <AnimatePresence mode="wait">
               {step === 'idle' && (
-                <motion.div
-                  key="idle-state"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                >
-                  <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-gray-900">Bienvenue</h1>
-                    <p className="text-gray-500 text-sm">Que voulez-vous commander aujourd'hui ?</p>
+                <motion.div key="idle" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
+                  <div className="mb-8">
+                    <h1 className="text-3xl font-black text-gray-900 tracking-tighter leading-tight uppercase">
+                      Bonjour {(user?.user_metadata?.full_name || MOCK_USER.name).split(' ')[0]} !
+                    </h1>
+                    <p className="text-gray-500 text-sm font-bold uppercase tracking-widest mt-1">Prêt pour votre prochain déplacement ?</p>
                   </div>
-                  
                   <div 
-                    onClick={handleOpenSearch}
-                    className="flex items-center gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={handleOpenSearch} 
+                    className="flex items-center gap-4 bg-slate-900 p-6 rounded-[28px] border border-slate-800 cursor-pointer hover:bg-slate-800 transition-all group shadow-xl shadow-slate-200"
                   >
-                    <div className="p-2 bg-yellow-500 rounded-lg text-white">
-                      <MapPin size={20} />
+                    <div className="p-2.5 bg-yellow-500 rounded-2xl text-white group-hover:scale-110 transition-transform">
+                      <MapPin size={24} />
                     </div>
-                    <span className="text-gray-400 font-medium">Saisir votre destination...</span>
-                  </div>
-
-                  <div className="mt-6 flex gap-4 overflow-x-auto no-scrollbar pb-2">
-                    {['Maison', 'Travail', 'Marché de Madina', 'Aéroport'].map((place) => (
-                      <button 
-                        key={place}
-                        onClick={() => handleDestinationSet(place)}
-                        className="flex flex-col items-center gap-1 min-w-[80px]"
-                      >
-                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-yellow-100 hover:text-yellow-600 transition-colors">
-                          <MapPin size={20} />
-                        </div>
-                        <span className="text-[10px] font-bold text-gray-600 text-center">{place}</span>
-                      </button>
-                    ))}
+                    <span className="text-white font-black text-lg tracking-tight uppercase">OÙ ALLEZ-VOUS ?</span>
                   </div>
                 </motion.div>
               )}
-
+              
               {step === 'selecting' && (
-                <motion.div
-                  key="selecting-state"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="space-y-4"
-                >
-                  <div className="flex justify-between items-center">
+                <motion.div key="selecting" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="space-y-4">
+                  <div className="flex justify-between items-center mb-2">
                     <div className="flex flex-col">
-                      <h2 className="text-xl font-bold text-gray-900">Vitesse & Confort</h2>
-                      <p className="text-xs text-gray-500 truncate max-w-[200px]">Vers: {destination}</p>
-                    </div>
-                    <div 
-                      onClick={handleOpenWallet}
-                      className="flex items-center gap-1 text-xs font-semibold bg-gray-100 px-3 py-1.5 rounded-full text-gray-600 cursor-pointer hover:bg-gray-200 transition-colors"
-                    >
-                      <WalletIcon size={12} />
-                      <span>Wongaye Pay</span>
+                      <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">CHOIX DU SERVICE</h2>
+                      <p className="text-[10px] font-bold text-yellow-600 uppercase tracking-widest">Vers: {destination}</p>
                     </div>
                   </div>
                   
                   <RideSelector 
-                    selectedId={selectedRide?.id} 
+                    selectedId={selectedRide?.id || null} 
                     onSelect={handleRideSelect} 
+                    destination={destination}
                   />
                   
                   <Button 
-                    className={`w-full h-14 rounded-2xl text-lg font-bold transition-all shadow-xl ${
-                      selectedRide 
-                        ? 'bg-black hover:bg-gray-900 text-white' 
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
-                    disabled={!selectedRide}
+                    className={`w-full h-16 rounded-[24px] text-lg font-black transition-all shadow-2xl ${selectedRide ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`} 
+                    disabled={!selectedRide} 
                     onClick={handleConfirmRide}
                   >
-                    {selectedRide 
-                      ? (selectedRide.category === 'cargo' || selectedRide.category === 'courier' 
-                          ? `Confirmer ${selectedRide.name}` 
-                          : `Commander ${selectedRide.name}`) 
-                      : 'Choisir un véhicule'
-                    }
+                    {selectedRide ? `CONFIRMER ${selectedRide.name.toUpperCase()}` : 'CHOISIR UNE OPTION'}
                   </Button>
                 </motion.div>
               )}
-
+              
               {step === 'searching' && (
-                <motion.div
-                  key="searching-state"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="py-12 flex flex-col items-center justify-center space-y-6"
-                >
-                  <div className="relative">
-                    <div className="w-20 h-20 border-4 border-yellow-100 border-t-yellow-500 rounded-full animate-spin" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center animate-pulse">
-                        <div className="w-4 h-4 bg-white rounded-full" />
-                      </div>
-                    </div>
+                <motion.div key="searching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-14 flex flex-col items-center justify-center space-y-8 text-center">
+                  <div className="relative mx-auto">
+                    <div className="w-28 h-28 border-4 border-yellow-100 border-t-yellow-500 rounded-full animate-spin mx-auto shadow-inner" />
                   </div>
                   <div className="text-center">
-                    <h2 className="text-xl font-bold text-gray-900">Recherche en cours...</h2>
-                    <p className="text-gray-500 text-sm">Un partenaire WONGAYE arrive bientôt</p>
+                    <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">RECHERCHE...</h2>
+                    <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">Partenaire Wongaye le plus proche</p>
                   </div>
-                  <Button variant="ghost" className="text-red-500" onClick={() => setStep('selecting')}>
-                    Annuler la recherche
-                  </Button>
+                  <Button variant="ghost" className="text-red-500 font-black uppercase text-xs tracking-widest" onClick={() => setStep('selecting')}>Annuler</Button>
                 </motion.div>
               )}
-
+              
               {step === 'confirmed' && selectedRide && (
-                <div key="confirmed-state">
-                  <DriverCard 
-                    rideName={selectedRide.name} 
-                    category={selectedRide.category}
-                    onCancel={resetFlow} 
-                  />
-                </div>
+                <DriverCard 
+                  rideName={selectedRide.name} 
+                  category={selectedRide.category} 
+                  driverRating={driverData.rating} 
+                  onCancel={resetFlow} 
+                />
               )}
             </AnimatePresence>
           </motion.div>
         </div>
+      )}
+
+      {isPaymentOpen && activeTripId && selectedRide && (
+        <ProcessPayment 
+          rideId={activeTripId}
+          amount={selectedRide.price}
+          onSuccess={handlePaymentSuccess}
+          onCancel={() => { setIsPaymentOpen(false); resetFlow(); }}
+        />
+      )}
+
+      {activeTripId && (
+        <RatingDialog
+          isOpen={isRatingOpen}
+          onClose={() => { setIsRatingOpen(false); resetFlow(); }}
+          tripId={activeTripId}
+          raterUserId={user?.id || MOCK_USER.id}
+          ratedUserId={driverData.id}
+          ratedUserName={driverData.name}
+          ratedUserAvatar={driverData.avatar}
+          onRatingSubmitted={() => toast.success("Note enregistrée !")}
+        />
       )}
     </div>
   );
